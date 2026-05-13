@@ -1,7 +1,7 @@
 /*
  * p3-client.c
- * Cliente que se conecta al servidor, muestra un menú y envía comandos.
- * Formato de comandos: "1|nombre_artista", "2|", "3|"
+ * Cliente con el mismo menú de la práctica 1.
+ * Opciones: Buscar artista, Buscar género, Salir.
  */
 
 #include <stdio.h>
@@ -38,11 +38,9 @@ int main() {
     char buffer[BUFFER_SIZE];
     
     do {
-        printf("\n====================================\n");
-        printf("    CALCULADOR DE DURACION MEDIA\n");
-        printf("====================================\n");
-        printf("1. Ingresar artista\n");
-        printf("2. Buscar duracion media de todas sus canciones\n");
+        printf("\n=== MENU ===\n");
+        printf("1. Buscar artista\n");
+        printf("2. Buscar genero\n");
         printf("3. Salir\n");
         printf("Opcion: ");
         scanf("%d", &opcion);
@@ -50,17 +48,23 @@ int main() {
         
         switch (opcion) {
             case 1:
-                printf("Nombre del artista: ");
+                printf("Ingrese nombre del artista: ");
                 fgets(entrada, sizeof(entrada), stdin);
                 entrada[strcspn(entrada, "\n")] = '\0';
                 snprintf(buffer, BUFFER_SIZE, "1|%s", entrada);
                 send(sock, buffer, strlen(buffer), 0);
+                // Recibir respuesta (duración media o mensaje de error)
+                memset(buffer, 0, BUFFER_SIZE);
                 recv(sock, buffer, BUFFER_SIZE, 0);
-                printf("-> Artista guardado: %s\n", entrada);
+                printf("\n>>> %s\n", buffer);
                 break;
                 
             case 2:
-                send(sock, "2|", 3, 0);
+                printf("Ingrese genero musical: ");
+                fgets(entrada, sizeof(entrada), stdin);
+                entrada[strcspn(entrada, "\n")] = '\0';
+                snprintf(buffer, BUFFER_SIZE, "2|%s", entrada);
+                send(sock, buffer, strlen(buffer), 0);
                 memset(buffer, 0, BUFFER_SIZE);
                 recv(sock, buffer, BUFFER_SIZE, 0);
                 printf("\n>>> %s\n", buffer);
