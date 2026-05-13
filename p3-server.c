@@ -1,10 +1,7 @@
 /*
  * p3-server.c
- * Servidor que calcula la duración media de todas las canciones de un artista
- * a partir de un archivo CSV (spotify_dataset.csv).
- * Escucha en puerto 8080, acepta hasta 32 clientes concurrentes con fork().
- * No usa índices en memoria, lee el archivo línea por línea.
- * Registra cada búsqueda en server.log.
+ * Servidor que calcula duración media por artista o por género.
+ * Recibe comandos: "1|artista" o "2|genero"
  */
 
 #include <stdio.h>
@@ -23,21 +20,19 @@
 #define DATASET "spotify_dataset.csv"
 #define LOGFILE "server.log"
 
-// Escribe en el archivo log con el formato exigido
-void escribir_log(const char *ip, const char *artista) {
+void escribir_log(const char *ip, int tipo, const char *termino) {
     FILE *f = fopen(LOGFILE, "a");
     if (!f) return;
     time_t t = time(NULL);
     struct tm *tm = localtime(&t);
-    fprintf(f, "[%04d%02d%02dT%02d%02d%02d] Cliente %s [busqueda - %s - ]\n",
+    const char *tipo_str = (tipo == 1) ? "artista" : "genero";
+    fprintf(f, "[%04d%02d%02dT%02d%02d%02d] Cliente %s [busqueda - %s - %s]\n",
             tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
             tm->tm_hour, tm->tm_min, tm->tm_sec,
-            ip, artista);
+            ip, tipo_str, termino);
     fclose(f);
 }
 
-// Extrae una columna de una línea CSV (versión simple, sin comillas)
-// col: 0=artista, 1=cancion, 2=año, 3=duracion_ms
 void extraer_columna(const char *linea, int col, char *dest, size_t max) {
     int col_actual = 0;
     size_t i = 0, d = 0;
@@ -54,47 +49,56 @@ void extraer_columna(const char *linea, int col, char *dest, size_t max) {
         i++;
     }
     dest[d] = '\0';
-    // Recortar espacios al final
     while (d > 0 && (dest[d-1] == ' ' || dest[d-1] == '\t'))
         dest[--d] = '\0';
 }
 
-// Calcula la duración media de todas las canciones de un artista
-// Recorre el archivo completo línea por línea, suma duraciones y cuenta.
-// Retorna -1 si no encuentra ninguna coincidencia.
+// Duplicar string para poder modificar con strtok
+char *duplicar_string(const char *src) {
+    char *dst = malloc(strlen(src) + 1);
+    if (dst) strcpy(dst, src);
+    return dst;
+}
+
+// Verifica si un género está en la lista de géneros (columna 5)
+int contiene_genero(const char *generos_csv, const char *genero_buscar) {
+    char *copia = duplicar_string(generos_csv);
+    if (!copia) return 0;
+    char *token = strtok(copia, ",");
+    int encontrado = 0;
+    while (token != NULL) {
+        // recortar espacios
+        while (*token == ' ' || *token == '\t') token++;
+        char *fin = token + strlen(token) - 1;
+        while (fin > token && (*fin == ' ' || *fin == '\t')) fin--;
+        *(fin + 1) = '\0';
+        
+        if (strcmp(token, genero_buscar) == 0) {
+            encontrado = 1;
+            break;
+        }
+        token = strtok(NULL, ",");
+    }
+    free(copia);
+    return encontrado;
+}
+
+// Calcula duración media por ARTISTA
 double duracion_media_artista(const char *artista) {
     FILE *f = fopen(DATASET, "r");
-    if (!f) {
-        perror("No se pudo abrir el dataset");
-        return -1;
-    }
+    if (!f) return -1;
     char linea[2048];
     long suma = 0;
     int count = 0;
     
-    // Saltar posible cabecera (si la primera línea contiene "artista" o "Artist")
-    if (fgets(linea, sizeof(linea), f)) {
-        if (strstr(linea, "artista") || strstr(linea, "Artist") ||
-            strstr(linea, "track") || strstr(linea, "name")) {
-            // Es cabecera, la ignoramos
-        } else {
-            // La primera línea ya es dato, volver al inicio
-            rewind(f);
-        }
-    }
-    
+    fgets(linea, sizeof(linea), f); // saltar cabecera si existe
     while (fgets(linea, sizeof(linea), f)) {
-        char art[256];
-        char dur_str[20];
+        char art[256], dur_str[20];
         extraer_columna(linea, 0, art, sizeof(art));
         extraer_columna(linea, 3, dur_str, sizeof(dur_str));
-        
         if (strcmp(art, artista) == 0) {
-            int duracion = atoi(dur_str);
-            if (duracion > 0) {
-                suma += duracion;
-                count++;
-            }
+            suma += atoi(dur_str);
+            count++;
         }
     }
     fclose(f);
@@ -102,13 +106,33 @@ double duracion_media_artista(const char *artista) {
     return (double)suma / count;
 }
 
-// Atiende a un cliente individual (se ejecuta en un proceso hijo)
+// Calcula duración media por GÉNERO
+double duracion_media_genero(const char *genero) {
+    FILE *f = fopen(DATASET, "r");
+    if (!f) return -1;
+    char linea[2048];
+    long suma = 0;
+    int count = 0;
+    
+    fgets(linea, sizeof(linea), f); // saltar cabecera
+    while (fgets(linea, sizeof(linea), f)) {
+        char generos_csv[1024], dur_str[20];
+        extraer_columna(linea, 5, generos_csv, sizeof(generos_csv));
+        extraer_columna(linea, 3, dur_str, sizeof(dur_str));
+        if (contiene_genero(generos_csv, genero)) {
+            suma += atoi(dur_str);
+            count++;
+        }
+    }
+    fclose(f);
+    if (count == 0) return -1;
+    return (double)suma / count;
+}
+
 void atender_cliente(int cliente_sock, struct sockaddr_in addr) {
     char buffer[BUFFER_SIZE];
     char ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(addr.sin_addr), ip, INET_ADDRSTRLEN);
-    
-    char artista[256] = "";
     
     while (1) {
         memset(buffer, 0, BUFFER_SIZE);
@@ -116,39 +140,36 @@ void atender_cliente(int cliente_sock, struct sockaddr_in addr) {
         if (bytes <= 0) break;
         
         int opcion;
-        char dato[512];
-        // Formato esperado: "opcion|dato" (para opción 1) o "2|" (buscar) o "3|" (salir)
-        sscanf(buffer, "%d|%[^\n]", &opcion, dato);
+        char termino[512];
+        sscanf(buffer, "%d|%[^\n]", &opcion, termino);
+        
+        double media;
+        char respuesta[BUFFER_SIZE];
         
         switch (opcion) {
-            case 1:  // Ingresar artista
-                strncpy(artista, dato, sizeof(artista) - 1);
-                artista[sizeof(artista) - 1] = '\0';
-                send(cliente_sock, "OK", 2, 0);
+            case 1: // Buscar artista
+                media = duracion_media_artista(termino);
+                if (media < 0)
+                    snprintf(respuesta, BUFFER_SIZE, "No se encontraron canciones del artista '%s'", termino);
+                else
+                    snprintf(respuesta, BUFFER_SIZE, "Duracion media de %s: %.2f ms", termino, media);
+                send(cliente_sock, respuesta, strlen(respuesta), 0);
+                escribir_log(ip, 1, termino);
                 break;
-            case 2:  // Buscar duración media
-                if (artista[0] == '\0') {
-                    send(cliente_sock, "Primero ingrese un artista (opcion 1)", 34, 0);
-                } else {
-                    double media = duracion_media_artista(artista);
-                    char respuesta[BUFFER_SIZE];
-                    if (media < 0)
-                        snprintf(respuesta, BUFFER_SIZE,
-                                 "No se encontraron canciones para el artista '%s'", artista);
-                    else
-                        snprintf(respuesta, BUFFER_SIZE,
-                                 "Duracion media de las canciones de %s: %.2f ms",
-                                 artista, media);
-                    send(cliente_sock, respuesta, strlen(respuesta), 0);
-                    // Registrar en el log
-                    escribir_log(ip, artista);
-                }
+            case 2: // Buscar género
+                media = duracion_media_genero(termino);
+                if (media < 0)
+                    snprintf(respuesta, BUFFER_SIZE, "No se encontraron canciones del genero '%s'", termino);
+                else
+                    snprintf(respuesta, BUFFER_SIZE, "Duracion media del genero %s: %.2f ms", termino, media);
+                send(cliente_sock, respuesta, strlen(respuesta), 0);
+                escribir_log(ip, 2, termino);
                 break;
-            case 3:  // Salir
+            case 3: // Salir
                 close(cliente_sock);
                 return;
             default:
-                send(cliente_sock, "Comando invalido", 16, 0);
+                send(cliente_sock, "Opcion invalida", 15, 0);
         }
     }
     close(cliente_sock);
@@ -160,15 +181,9 @@ int main() {
     socklen_t addrlen = sizeof(cliente_addr);
     int clientes_activos = 0;
     
-    // Ignorar SIGCHLD para evitar procesos zombie
     signal(SIGCHLD, SIG_IGN);
     
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd < 0) {
-        perror("socket");
-        exit(1);
-    }
-    
     int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     
@@ -176,39 +191,22 @@ int main() {
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(PUERTO);
     
-    if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("bind");
-        exit(1);
-    }
+    bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr));
+    listen(server_fd, MAX_CLIENTES);
     
-    if (listen(server_fd, MAX_CLIENTES) < 0) {
-        perror("listen");
-        exit(1);
-    }
-    
-    printf("Servidor escuchando en puerto %d (max %d clientes)...\n", PUERTO, MAX_CLIENTES);
+    printf("Servidor listo (max %d clientes)\n", MAX_CLIENTES);
     
     while (clientes_activos < MAX_CLIENTES) {
         cliente_sock = accept(server_fd, (struct sockaddr*)&cliente_addr, &addrlen);
-        if (cliente_sock < 0) {
-            perror("accept");
-            continue;
-        }
-        
-        pid_t pid = fork();
-        if (pid == 0) {  // Proceso hijo
+        if (fork() == 0) {
             close(server_fd);
             atender_cliente(cliente_sock, cliente_addr);
             exit(0);
-        } else if (pid > 0) { // Proceso padre
+        } else {
             close(cliente_sock);
             clientes_activos++;
-        } else {
-            perror("fork");
-            close(cliente_sock);
         }
     }
-    
     close(server_fd);
     return 0;
 }
