@@ -5,7 +5,7 @@ INTEGRANTES:
 * Joel Santiago Neuta
 * Adriana Lucia Gonzalez
 
-FECHA: [Fecha actual]
+FECHA: [05/14/2026]
 
 =================================
 1. DESCRIPCIÓN GENERAL
