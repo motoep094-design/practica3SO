@@ -7,9 +7,9 @@ INTEGRANTES:
 
 FECHA: [Fecha actual]
 
-================================================================================
+=================================
 1. DESCRIPCIÓN GENERAL
-================================================================================
+=================================
 
 Sistema cliente-servidor que permite consultar la duración media (en ms) de 
 canciones del dataset "spotify_dataset.csv". El servidor atiende hasta 32 
@@ -17,18 +17,18 @@ clientes concurrentes mediante sockets TCP y procesos fork(). NO carga el
 dataset en memoria (lee línea por línea desde disco), por lo que el uso de 
 RAM es inferior a 1 MB, cumpliendo la restricción del profesor.
 
-================================================================================
+=================================
 2. ARCHIVOS ENTREGADOS
-================================================================================
+=================================
 
 p3-server.c   - Código del servidor
 p3-client.c   - Código del cliente  
 Makefile      - Para compilar ambos programas
 LEEME         - Este archivo
 
-================================================================================
+=================================
 3. COMPILACIÓN
-================================================================================
+=================================
 
 En la terminal, dentro de la carpeta del proyecto:
 
@@ -42,9 +42,9 @@ Para limpiar:
 
     make clean
 
-================================================================================
+=================================
 4. EJECUCIÓN
-================================================================================
+=================================
 
 PASO 1 - Iniciar el servidor (una terminal):
     ./p3-server
@@ -72,9 +72,9 @@ PASO 3 - Usar el menú del cliente:
 
     Después de cada búsqueda, presionar Enter para volver al menú.
 
-================================================================================
+=================================
 5. FORMATO DE COMUNICACIÓN (interno)
-================================================================================
+=================================
 
 Cliente envía al servidor:
     "1|nombre_artista"   → Buscar por artista
@@ -85,9 +85,9 @@ Servidor responde con texto legible:
     "Duracion media de BTS: 234567.89 ms"
     o mensaje de error si no encuentra nada.
 
-================================================================================
+=================================
 6. ARCHIVO DE LOG
-================================================================================
+=================================
 
 El servidor genera "server.log" en el mismo directorio. Cada búsqueda registra:
 
@@ -97,9 +97,9 @@ Ejemplo:
     [20250514T103022] Cliente 127.0.0.1 [busqueda - artista - BTS]
     [20250514T103045] Cliente 127.0.0.1 [busqueda - genero - pop]
 
-================================================================================
+=================================
 7. REQUISITOS DEL SISTEMA
-================================================================================
+=================================
 
 - Linux (o WSL2 en Windows, o macOS)
 - Compilador GCC
@@ -114,9 +114,9 @@ Formato esperado del CSV:
 
 Si tu CSV tiene diferente orden, ajustar índices en extraer_columna().
 
-================================================================================
+=================================
 8. POSIBLES ERRORES
-================================================================================
+=================================
 
 Error: "Address already in use"
     Solución: El puerto 8080 está ocupado. Esperar o matar proceso anterior:
@@ -128,9 +128,9 @@ Error: "No se pudo abrir el dataset"
 Error: "Connection refused"
     Solución: El servidor no está corriendo. Ejecutar primero ./p3-server.
 
-================================================================================
+=================================
 9. EJEMPLO DE SESIÓN
-================================================================================
+=================================
 
 Terminal 1 (servidor):
     $ ./p3-server
@@ -161,6 +161,6 @@ Terminal 1 (ver log):
     $ cat server.log
     [20250514T103022] Cliente 127.0.0.1 [busqueda - artista - BTS]
 
-================================================================================
+=================================
 FIN DEL LEEME
-================================================================================
+=================================
